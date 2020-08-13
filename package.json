@@ -1,5 +1,5 @@
 {
-  "name": "netlify-functions-template",
+  "name": "public-testing-example",
   "version": "0.0.1",
   "description": "Serverless functions, services for uwhealth.org in node.js project template",
   "main": "serverless/hello-world.js",
