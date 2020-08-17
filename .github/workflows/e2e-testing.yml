@@ -1,0 +1,136 @@
+# This workflow will build a Java project with Gradle
+# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-gradle
+
+name: End-to-End Tesing
+
+on:
+  repository_dispatch:
+    types: []
+  workflow_dispatch:
+  pull_request:
+    branches: [ develop, master ]
+
+env:
+  INTERVAL: 5
+  TIMEOUT: 180
+  TEST_SUITE_REPO: UWHealth/patient
+  TEST_SUITE_REPO_REF: nm/gh-workflow-setup
+  TEST_SUITE_JAR_NAME: test-library
+  TEST_SUITE_DEFINITION_FILE: src/test/resources/single/win/ie/ztest.xml
+  CHECK_SUITE_SLUG: netlify
+  CHECK_SUITE_STATUS_PREFIX: netlify
+  SKIP_TESTING_FLAG: skip e2e-testing
+
+jobs:
+  e2e-testing:
+    runs-on: ubuntu-latest
+    steps:
+    - name: no skip ci or netlify or e2e-testing in comment
+      id: do-ci
+      uses: actions/github-script@v2.0.1
+      with:
+        script: |
+          const resp = await github.repos.getCommit({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: '${{ github.event.pull_request.head.sha || github.sha }}',
+          });
+          const skipCI = /\[skip netlify\]|\[skip ci\]|\[${{ env.SKIP_TESTING_FLAG }}\]/i.test(resp.data.commit.message);
+          console.log(`The value of skipCI: ${skipCI}`);
+          return !skipCI;
+    - name: set skipped e2e status
+      id: skipped-e2e-status
+      if: ${{ !fromJSON(steps.do-ci.outputs.result) }}
+      uses: actions/github-script@v2.0.1
+      with:
+        script: |
+          github.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: '${{ github.event.pull_request.head.sha || github.sha }}',
+              state: 'success',
+              context: 'End-to-End Tesing Skipped!',
+              description: '[skip (ci|netlify|${{ env.SKIP_TESTING_FLAG }})] present in message.',
+          })
+    - name: Wait For preview-deploy
+      id: wait-for-preview-deploy
+      if: fromJSON(steps.do-ci.outputs.result)
+      uses: jitterbit/await-check-suites@v1
+      with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        intervalSeconds: ${{ env.INTERVAL }}
+        timeoutSeconds: ${{ env.TIMEOUT }}
+        appSlugFilter: ${{ env.CHECK_SUITE_SLUG }}
+    - name: get status for completed preview
+      id: preview-status
+      if: fromJSON(steps.do-ci.outputs.result)
+      uses: actions/github-script@v2.0.1
+      with:
+        result-encoding: string
+        script: |
+          const resp = await github.repos.getCombinedStatusForRef({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: '${{ github.event.pull_request.head.sha || github.sha }}',
+          });
+          const netlifyStatus = resp.data.statuses.find((status) => status.context.startsWith('${{ env.CHECK_SUITE_STATUS_PREFIX }}/'));
+          return netlifyStatus.target_url;
+    - name: target url is not present
+      id: no-target-url
+      if: ${{ fromJSON(steps.do-ci.outputs.result) && !startsWith(steps.preview-status.outputs.result,'https://') }}
+      run: echo '::error::Target URL not present, value=${{ steps.preview-status.outputs.result }}' && exit 1
+    - name: Set up JDK 11
+      id: setup-jdk
+      if: fromJSON(steps.do-ci.outputs.result)
+      uses: actions/setup-java@v1
+      with:
+        java-version: 11
+    - name: Get the tests repo to run
+      id: get-tests
+      if: fromJSON(steps.do-ci.outputs.result)
+      uses: actions/checkout@v2
+      with:
+        repository: ${{ env.TEST_SUITE_REPO }}
+        ref: ${{ env.TEST_SUITE_REPO_REF }}
+        path: test-library
+        token: ${{ secrets.READ_ONLY_INTERNAL_TOKEN }}
+    - name: Cache Gradle packages
+      id: cache-gradle
+      if: fromJSON(steps.do-ci.outputs.result)
+      uses: actions/cache@v2
+      with:
+        path: ./test-library/.gradle/caches
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
+        restore-keys: ${{ runner.os }}-gradle
+    - name: Grant execute permission for gradlew
+      id: gradlew-permission
+      if: fromJSON(steps.do-ci.outputs.result)
+      run: chmod +x gradlew
+      working-directory: ./test-library
+    - name: Build with Gradle
+      id: build-tests
+      if: fromJSON(steps.do-ci.outputs.result)
+      run: ./gradlew build
+      working-directory: ./test-library
+    - name: Run E2E tests
+      id: run-e2e-tests
+      if: fromJSON(steps.do-ci.outputs.result)
+      run: |
+        java -DAPP_ENV=qa -DINTERNAL_GRID=FALSE -DPHONES=TRUE -Dlogging.file=logs \
+        -DCLOUD_DEVICE_AUTH=https://us1.appium.testobject.com/wd/hub \
+        -DINTERNAL_AUTH=https://example.org \
+        -DCLOUD_AUTH=${{ secrets.SELENIUM_CLOUD_AUTH }} \
+        -DCLOUD_USER=${{ secrets.SELENIUM_CLOUD_USER }} \
+        -DCLOUD_ACCESS_KEY=${{ secrets.SELENIUM_CLOUD_ACCESS_KEY }} \
+        -DCLOUD_DEVICE_API=${{ secrets.SELENIUM_CLOUD_DEVICE_API }} \
+        -DROOT_URL=${{ steps.preview-status.outputs.result }}/ \
+        -jar ./build/libs/${{ env.TEST_SUITE_JAR_NAME }}.jar ./${{ env.TEST_SUITE_DEFINITION_FILE }}
+      working-directory: ./test-library
+    - name: Archive test results
+      id: test-results-archive
+      if: fromJSON(steps.do-ci.outputs.result)
+      uses: actions/upload-artifact@v2
+      with:
+        name: selenium_test_results
+        path: ./test-library/test-output/*
