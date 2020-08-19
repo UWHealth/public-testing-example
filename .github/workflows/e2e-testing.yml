@@ -139,6 +139,6 @@ jobs:
       if: fromJSON(steps.do-ci.outputs.result)
       uses: uwhealth/testng-results-handler@moop-moop/jest-unit-tests
       with:
-        testng_results: test-library/testng-results.xml
+        testng_results: test-library/test-output/testng-results.xml
         token: ${{ secrets.GITHUB_TOKEN }}
         status_url: https://app.saucelabs.com/dashboard/builds
