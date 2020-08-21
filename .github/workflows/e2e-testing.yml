@@ -27,7 +27,7 @@ jobs:
     steps:
     - name: no skip ci or netlify or e2e-testing in comment
       id: do-ci
-      uses: actions/github-script@v2.0.1
+      uses: actions/github-script@v3
       with:
         script: |
           const resp = await github.repos.getCommit({
@@ -41,7 +41,7 @@ jobs:
     - name: set skipped e2e status
       id: skipped-e2e-status
       if: ${{ !fromJSON(steps.do-ci.outputs.result) }}
-      uses: actions/github-script@v2.0.1
+      uses: actions/github-script@v3
       with:
         script: |
           github.repos.createCommitStatus({
@@ -65,7 +65,7 @@ jobs:
     - name: get status for completed preview
       id: preview-status
       if: fromJSON(steps.do-ci.outputs.result)
-      uses: actions/github-script@v2.0.1
+      uses: actions/github-script@v3
       with:
         result-encoding: string
         script: |
