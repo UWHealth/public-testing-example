@@ -13,10 +13,10 @@ on:
 env:
   INTERVAL: 5
   TIMEOUT: 180
-  TEST_SUITE_REPO: UWHealth/patient
-  TEST_SUITE_REPO_REF: nm/gh-workflow-setup
+  TEST_SUITE_REPO: UWHealth/uwhealth.org-qa
+  TEST_SUITE_REPO_REF: v1.0.0
   TEST_SUITE_JAR_NAME: test-library
-  TEST_SUITE_DEFINITION_FILE: src/test/resources/single/win/ie/ztest.xml
+  TEST_SUITE_DEFINITION_FILE: src/test/resources/driverConnectCheck.xml
   CHECK_SUITE_SLUG: netlify
   CHECK_SUITE_STATUS_PREFIX: netlify
   SKIP_TESTING_FLAG: skip e2e-testing
@@ -138,7 +138,7 @@ jobs:
     - name: Process TestNG results
       id: testng-results
       if: fromJSON(steps.do-ci.outputs.result)
-      uses: uwhealth/testng-results-handler@moop-moop/jest-unit-tests
+      uses: uwhealth/testng-results-handler@v1
       with:
         testng_results: test-library/test-output/testng-results.xml
         token: ${{ secrets.GITHUB_TOKEN }}
