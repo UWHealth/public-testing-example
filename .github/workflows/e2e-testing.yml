@@ -125,6 +125,7 @@ jobs:
         -DCLOUD_ACCESS_KEY=${{ secrets.SELENIUM_CLOUD_ACCESS_KEY }} \
         -DCLOUD_DEVICE_API=${{ secrets.SELENIUM_CLOUD_DEVICE_API }} \
         -DROOT_URL=${{ steps.preview-status.outputs.result }}/ \
+        -DRUN_NAME_LABEL=PR-${{ github.event.pull_request.number }} \
         -jar ./build/libs/${{ env.TEST_SUITE_JAR_NAME }}.jar ./${{ env.TEST_SUITE_DEFINITION_FILE }}
       working-directory: ./test-library
     - name: Archive test results
