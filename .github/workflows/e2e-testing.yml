@@ -13,10 +13,10 @@ on:
 env:
   INTERVAL: 5
   TIMEOUT: 180
-  TEST_SUITE_REPO: UWHealth/patient
-  TEST_SUITE_REPO_REF: nm/gh-workflow-setup
+  TEST_SUITE_REPO: UWHealth/uwhealth.org-qa
+  TEST_SUITE_REPO_REF: v1.0.0
   TEST_SUITE_JAR_NAME: test-library
-  TEST_SUITE_DEFINITION_FILE: src/test/resources/single/win/ie/ztest.xml
+  TEST_SUITE_DEFINITION_FILE: src/test/resources/driverConnectCheck.xml
   CHECK_SUITE_SLUG: netlify
   CHECK_SUITE_STATUS_PREFIX: netlify
   SKIP_TESTING_FLAG: skip e2e-testing
@@ -27,7 +27,7 @@ jobs:
     steps:
     - name: no skip ci or netlify or e2e-testing in comment
       id: do-ci
-      uses: actions/github-script@v2.0.1
+      uses: actions/github-script@v3
       with:
         script: |
           const resp = await github.repos.getCommit({
@@ -41,7 +41,7 @@ jobs:
     - name: set skipped e2e status
       id: skipped-e2e-status
       if: ${{ !fromJSON(steps.do-ci.outputs.result) }}
-      uses: actions/github-script@v2.0.1
+      uses: actions/github-script@v3
       with:
         script: |
           github.repos.createCommitStatus({
@@ -65,7 +65,7 @@ jobs:
     - name: get status for completed preview
       id: preview-status
       if: fromJSON(steps.do-ci.outputs.result)
-      uses: actions/github-script@v2.0.1
+      uses: actions/github-script@v3
       with:
         result-encoding: string
         script: |
@@ -125,6 +125,7 @@ jobs:
         -DCLOUD_ACCESS_KEY=${{ secrets.SELENIUM_CLOUD_ACCESS_KEY }} \
         -DCLOUD_DEVICE_API=${{ secrets.SELENIUM_CLOUD_DEVICE_API }} \
         -DROOT_URL=${{ steps.preview-status.outputs.result }}/ \
+        -DRUN_NAME_LABEL=PR-${{ github.event.pull_request.number }} \
         -jar ./build/libs/${{ env.TEST_SUITE_JAR_NAME }}.jar ./${{ env.TEST_SUITE_DEFINITION_FILE }}
       working-directory: ./test-library
     - name: Archive test results
@@ -134,3 +135,11 @@ jobs:
       with:
         name: selenium_test_results
         path: ./test-library/test-output/*
+    - name: Process TestNG results
+      id: testng-results
+      if: fromJSON(steps.do-ci.outputs.result)
+      uses: uwhealth/testng-results-handler@v1
+      with:
+        testng_results: test-library/test-output/testng-results.xml
+        token: ${{ secrets.GITHUB_TOKEN }}
+        status_url: https://app.saucelabs.com/dashboard/builds
